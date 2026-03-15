@@ -31,7 +31,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin claude/scrape-basketball-stats-LRDNF
+          git reset --soft origin/claude/scrape-basketball-stats-LRDNF
           git add march_madness_players.csv
           git diff --cached --quiet || git commit -m "Add scraped March Madness player stats with PPG_L10"
-          git pull --rebase origin claude/scrape-basketball-stats-LRDNF
-          git push
+          git push origin HEAD:claude/scrape-basketball-stats-LRDNF
