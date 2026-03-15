@@ -1,19 +1,20 @@
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 import pandas as pd
 import time
+
 SCHOOLS = [
     # EAST
-    "duke", "siena", "ohio-state", "tcu", "st-johns", "northern-iowa",
+    "duke", "siena", "ohio-state", "texas-christian", "st-johns", "northern-iowa",
     "kansas", "california-baptist", "louisville", "south-florida",
-    "michigan-state", "north-dakota-state", "ucla", "ucf", "uconn", "furman",
+    "michigan-state", "north-dakota-state", "ucla", "central-florida", "connecticut", "furman",
     # SOUTH
     "florida", "lehigh", "prairie-view", "clemson", "iowa", "vanderbilt",
-    "mcneese-state", "nebraska", "troy", "north-carolina", "vcu", "illinois",
-    "penn", "saint-marys-ca", "texas-am", "houston", "idaho",
+    "mcneese-state", "nebraska", "troy", "north-carolina", "virginia-commonwealth", "illinois",
+    "pennsylvania", "saint-marys-ca", "texas-am", "houston", "idaho",
     # WEST
-    "arizona", "liu", "villanova", "utah-state", "wisconsin", "high-point",
-    "arkansas", "hawaii", "byu", "nc-state", "miami-fl", "gonzaga",
+    "arizona", "long-island-university", "villanova", "utah-state", "wisconsin", "high-point",
+    "arkansas", "hawaii", "brigham-young", "north-carolina-state", "miami-fl", "gonzaga",
     "kennesaw-state", "missouri", "purdue", "queens-nc",
     # MIDWEST
     "michigan", "howard", "umbc", "georgia", "saint-louis", "texas-tech",
@@ -21,19 +22,33 @@ SCHOOLS = [
     "virginia", "wright-state", "kentucky", "santa-clara", "iowa-state",
     "tennessee-state",
 ]
+
 BASE_URL = "https://www.sports-reference.com/cbb/schools/{}/men/2026.html"
 GAMELOG_URL = "https://www.sports-reference.com/cbb/players/{}/gamelog/2026"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+
+def find_table_in_comments(soup, table_id):
+    """Sports Reference hides tables inside HTML comments — parse them out."""
+    for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
+        if table_id in comment:
+            comment_soup = BeautifulSoup(comment, "html.parser")
+            table = comment_soup.find("table", {"id": table_id})
+            if table:
+                return table
+    return None
+
+
 def get_roster_and_ppg(school):
     url = BASE_URL.format(school)
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
+        r = requests.get(url, headers=HEADERS, timeout=15)
         r.raise_for_status()
     except Exception as e:
         print(f"  ERROR fetching {school}: {e}")
         return []
     soup = BeautifulSoup(r.text, "html.parser")
-    table = soup.find("table", {"id": "per_game"})
+    table = soup.find("table", {"id": "per_game"}) or find_table_in_comments(soup, "per_game")
     if not table:
         print(f"  No per_game table found for {school}")
         return []
@@ -62,18 +77,20 @@ def get_roster_and_ppg(school):
             "player_slug": player_slug
         })
     return players
+
+
 def get_l10_ppg(player_slug):
     if not player_slug:
         return None
     url = GAMELOG_URL.format(player_slug)
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
+        r = requests.get(url, headers=HEADERS, timeout=15)
         r.raise_for_status()
     except Exception as e:
         print(f"    ERROR fetching gamelog for {player_slug}: {e}")
         return None
     soup = BeautifulSoup(r.text, "html.parser")
-    table = soup.find("table", {"id": "gamelog"})
+    table = soup.find("table", {"id": "gamelog"}) or find_table_in_comments(soup, "gamelog")
     if not table:
         return None
     point_totals = []
@@ -90,6 +107,8 @@ def get_l10_ppg(player_slug):
     if not last10:
         return None
     return round(sum(last10) / len(last10), 1)
+
+
 # Main loop
 all_players = []
 for school in SCHOOLS:
@@ -98,15 +117,19 @@ for school in SCHOOLS:
     print(f"  Found {len(players)} players")
     for p in players:
         slug = p.pop("player_slug")
-        time.sleep(0.8)
+        time.sleep(3)
         p["PPG_L10"] = get_l10_ppg(slug)
     all_players.extend(players)
-    time.sleep(1.5)
+    time.sleep(4)
+
 # Build and save dataframe
-df = pd.DataFrame(all_players)[["Player", "Team", "PPG", "PPG_L10"]]
-df = df[df["PPG"].notna()].sort_values("PPG", ascending=False).reset_index(drop=True)
-df.to_csv("march_madness_players.csv", index=False)
-print("\n=== TOP 30 BY PPG ===")
-print(df.head(30).to_string(index=False))
-print(f"\nTotal players scraped: {len(df)}")
-print("Saved to march_madness_players.csv")
+if not all_players:
+    print("No data collected.")
+else:
+    df = pd.DataFrame(all_players)[["Player", "Team", "PPG", "PPG_L10"]]
+    df = df[df["PPG"].notna()].sort_values("PPG", ascending=False).reset_index(drop=True)
+    df.to_csv("march_madness_players.csv", index=False)
+    print("\n=== TOP 30 BY PPG ===")
+    print(df.head(30).to_string(index=False))
+    print(f"\nTotal players scraped: {len(df)}")
+    print("Saved to march_madness_players.csv")
