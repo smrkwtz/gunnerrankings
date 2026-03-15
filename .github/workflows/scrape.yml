@@ -24,10 +24,13 @@ jobs:
       - name: Run Fox Sports scraper
         run: python scrape_foxsports.py
 
+      - name: Add PPG_L10 from Sports Reference game logs
+        run: python add_l10.py
+
       - name: Commit and push CSV
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add march_madness_players.csv
-          git diff --cached --quiet || git commit -m "Add scraped March Madness player stats"
+          git diff --cached --quiet || git commit -m "Add scraped March Madness player stats with PPG_L10"
           git push
