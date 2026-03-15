@@ -21,11 +21,8 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4 pandas
 
-      - name: Run Fox Sports scraper
-        run: python scrape_foxsports.py
-
-      - name: Add PPG_L10 from Sports Reference game logs
-        run: python add_l10.py
+      - name: Scrape Sports Reference (PPG + PPG_L10)
+        run: python scrape_stats.py
 
       - name: Commit and push CSV
         run: |
