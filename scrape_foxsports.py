@@ -2,8 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import time
+import json
 
-# Fox Sports slugs for all 68 teams
 TEAMS = {
     # EAST
     "duke-blue-devils": "Duke",
@@ -78,19 +78,45 @@ TEAMS = {
     "tennessee-state-tigers": "Tennessee State",
 }
 
-BASE_URL = "https://www.foxsports.com/college-basketball/{}-team-stats?category=scoring&season=2025&sort=ppg&sortOrder=desc"
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+TEAM_STATS_URL = "https://www.foxsports.com/college-basketball/{}-team-stats?category=scoring&season=2025&sort=ppg&sortOrder=desc"
+GAMELOG_URL = "https://www.foxsports.com/college-basketball/{}-player-game-log?season=2025"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
 
-def get_players(slug, team_name):
-    url = BASE_URL.format(slug)
+
+def extract_next_data(soup):
+    """Pull data from Next.js __NEXT_DATA__ script tag if present."""
+    tag = soup.find("script", {"id": "__NEXT_DATA__"})
+    if tag:
+        try:
+            return json.loads(tag.string)
+        except Exception:
+            pass
+    return None
+
+
+def get_players(team_slug, team_name):
+    url = TEAM_STATS_URL.format(team_slug)
     try:
         r = requests.get(url, headers=HEADERS, timeout=15)
         r.raise_for_status()
     except Exception as e:
         print(f"  ERROR {team_name}: {e}")
         return []
+
     soup = BeautifulSoup(r.text, "html.parser")
+
+    # Debug: show what we got
+    next_data = extract_next_data(soup)
+    if next_data:
+        print(f"  [Next.js data found — {len(str(next_data))} chars]")
+
     rows = soup.find_all("tr")
+    print(f"  [HTML table rows found: {len(rows)}]")
+
     players = []
     for row in rows:
         cells = row.find_all("td")
@@ -99,33 +125,91 @@ def get_players(slug, team_name):
         name_cell = cells[1]
         ppg_cell = cells[5]
         name = name_cell.get_text(strip=True)
-        # Strip position suffix
-        name = ' '.join([w for w in name.split() if w not in ['F','G','C','G-F','F-C','F-G','C-F']])
+        name = ' '.join([w for w in name.split() if w not in ['F', 'G', 'C', 'G-F', 'F-C', 'F-G', 'C-F']])
         ppg_text = ppg_cell.get_text(strip=True)
         try:
             ppg = float(ppg_text)
         except ValueError:
             continue
-        if name and ppg > 0:
-            players.append({"Player": name, "Team": team_name, "PPG": ppg})
+        if not name or ppg <= 0:
+            continue
+
+        # Extract player slug from the link in the name cell
+        player_slug = None
+        link = name_cell.find("a")
+        if link and link.get("href"):
+            href = link["href"]
+            last = href.rstrip("/").split("/")[-1]
+            player_slug = last.replace("-player-stats", "")
+
+        players.append({"Player": name, "Team": team_name, "PPG": ppg, "player_slug": player_slug})
+
     return players
 
+
+def get_l10_ppg(player_slug):
+    if not player_slug:
+        return None
+    url = GAMELOG_URL.format(player_slug)
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=15)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"    ERROR gamelog {player_slug}: {e}")
+        return None
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    rows = soup.find_all("tr")
+    points = []
+
+    # Find the PTS column index from header row
+    pts_col = -1  # default to last column
+    for row in rows:
+        headers = row.find_all("th")
+        if headers:
+            for i, h in enumerate(headers):
+                if h.get_text(strip=True).upper() == "PTS":
+                    pts_col = i
+                    break
+            if pts_col != -1:
+                break
+
+    for row in rows:
+        cells = row.find_all("td")
+        if not cells:
+            continue
+        try:
+            pts_text = cells[pts_col].get_text(strip=True)
+            pts = int(pts_text)
+            points.append(pts)
+        except (ValueError, IndexError):
+            continue
+
+    last10 = points[-10:] if len(points) >= 10 else points
+    if not last10:
+        return None
+    return round(sum(last10) / len(last10), 1)
+
+
+# Main loop
 all_players = []
-for slug, name in TEAMS.items():
-    print(f"Scraping {name}...")
-    players = get_players(slug, name)
+for team_slug, team_name in TEAMS.items():
+    print(f"Scraping {team_name}...")
+    players = get_players(team_slug, team_name)
     print(f"  Found {len(players)} players")
+    for p in players:
+        slug = p.pop("player_slug")
+        time.sleep(2)
+        p["PPG_L10"] = get_l10_ppg(slug)
     all_players.extend(players)
-    time.sleep(1.5)
+    time.sleep(3)
 
 df = pd.DataFrame(all_players)
 if df.empty:
-    print("No data collected — Fox Sports may require JavaScript rendering")
-    print("Falling back to Sports Reference...")
-    import subprocess
-    subprocess.run(["python", "scrape_stats.py"], check=True)
+    print("No data collected.")
+    print("Tip: Fox Sports may require JavaScript — check __NEXT_DATA__ output above.")
 else:
-    df = df[["Player", "Team", "PPG"]].sort_values("PPG", ascending=False).reset_index(drop=True)
+    df = df[["Player", "Team", "PPG", "PPG_L10"]].sort_values("PPG", ascending=False).reset_index(drop=True)
     df.to_csv("march_madness_players.csv", index=False)
     print("\n=== TOP 30 BY PPG ===")
     print(df.head(30).to_string(index=False))
