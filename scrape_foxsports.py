@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import time
 import json
+import re
 
 TEAMS = {
     # EAST
@@ -125,7 +126,8 @@ def get_players(team_slug, team_name):
         name_cell = cells[1]
         ppg_cell = cells[5]
         name = name_cell.get_text(strip=True)
-        name = ' '.join([w for w in name.split() if w not in ['F', 'G', 'C', 'G-F', 'F-C', 'F-G', 'C-F']])
+        # Position is glued directly to name end (e.g. "Cameron BoozerF") — strip it
+        name = re.sub(r'(F|G|C|G-F|F-C|F-G|C-F|PF|PG|SG|SF)$', '', name).strip()
         ppg_text = ppg_cell.get_text(strip=True)
         try:
             ppg = float(ppg_text)
@@ -162,27 +164,29 @@ def get_l10_ppg(player_slug):
     rows = soup.find_all("tr")
     points = []
 
-    # Find the PTS column index from header row
-    pts_col = -1  # default to last column
+    # Find PTS column by scanning header rows (Fox Sports uses both th and td in headers)
+    pts_col = None
     for row in rows:
-        headers = row.find_all("th")
-        if headers:
-            for i, h in enumerate(headers):
-                if h.get_text(strip=True).upper() == "PTS":
-                    pts_col = i
-                    break
-            if pts_col != -1:
-                break
+        cells = row.find_all(["th", "td"])
+        texts = [c.get_text(strip=True).upper() for c in cells]
+        if "PTS" in texts:
+            pts_col = texts.index("PTS")
+            print(f"    [columns: {texts}, PTS at index {pts_col}]")
+            break
+
+    if pts_col is None:
+        print(f"    [no PTS column found for {player_slug}]")
+        return None
 
     for row in rows:
         cells = row.find_all("td")
-        if not cells:
+        if len(cells) <= pts_col:
             continue
         try:
-            pts_text = cells[pts_col].get_text(strip=True)
-            pts = int(pts_text)
-            points.append(pts)
-        except (ValueError, IndexError):
+            pts = int(cells[pts_col].get_text(strip=True))
+            if 0 <= pts <= 75:  # sanity check: valid point total
+                points.append(pts)
+        except ValueError:
             continue
 
     last10 = points[-10:] if len(points) >= 10 else points
