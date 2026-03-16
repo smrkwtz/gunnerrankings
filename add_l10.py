@@ -50,7 +50,7 @@ TEAM_TO_SLUG = {
     "Hawaii": "hawaii",
     "BYU": "byu",
     "NC State": "nc-state",
-    "Miami": "miami-fl",
+    "Miami (FL)": "miami-fl",
     "Gonzaga": "gonzaga",
     "Kennesaw State": "kennesaw-state",
     "Missouri": "missouri",
