@@ -9,16 +9,26 @@ import threading
 
 rate_lock = threading.Lock()
 last_request_time = [0.0]
-MIN_DELAY = 0.5  # seconds between requests globally
+MIN_DELAY = 1.0  # seconds between requests globally
+
+SESSION = requests.Session()
+SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+})
 
 
-def throttled_get(url, headers, timeout=15):
+def throttled_get(url, timeout=15):
     with rate_lock:
         elapsed = time.time() - last_request_time[0]
         if elapsed < MIN_DELAY:
             time.sleep(MIN_DELAY - elapsed)
         last_request_time[0] = time.time()
-    return requests.get(url, headers=headers, timeout=timeout)
+    return SESSION.get(url, timeout=timeout)
 
 TEAMS = {
     # EAST
@@ -96,11 +106,6 @@ TEAMS = {
 
 TEAM_STATS_URL = "https://www.foxsports.com/college-basketball/{}-team-stats?category=scoring&season=2025&sort=ppg&sortOrder=desc"
 GAMELOG_URL = "https://www.foxsports.com/college-basketball/{}-player-game-log?season=2025"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-}
 
 
 def extract_next_data(soup):
@@ -117,7 +122,7 @@ def extract_next_data(soup):
 def get_players(team_slug, team_name):
     url = TEAM_STATS_URL.format(team_slug)
     try:
-        r = throttled_get(url, HEADERS)
+        r = throttled_get(url)
         r.raise_for_status()
     except Exception as e:
         print(f"  ERROR {team_name}: {e}")
@@ -169,7 +174,7 @@ def get_l10_ppg(player_slug):
         return None
     url = GAMELOG_URL.format(player_slug)
     try:
-        r = throttled_get(url, HEADERS)
+        r = throttled_get(url)
         r.raise_for_status()
     except Exception as e:
         print(f"    ERROR gamelog {player_slug}: {e}")
@@ -215,6 +220,7 @@ for team_slug, team_name in TEAMS.items():
     players = get_players(team_slug, team_name)
     print(f"  Found {len(players)} players")
     all_players.extend(players)
+    time.sleep(2)
 
 print(f"\nTotal players found: {len(all_players)}")
 print("Fetching game logs in parallel...")
