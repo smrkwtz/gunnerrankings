@@ -100,8 +100,8 @@ def get_roster(team_id, team_name):
 
 
 def get_ppg(athlete_id):
-    """Season PPG from ESPN athlete statistics."""
-    r = throttled_get(f"{CORE}/athletes/{athlete_id}/statistics/0?season=2026&seasontype=2")
+    """Season PPG from ESPN athlete statistics (season in path)."""
+    r = throttled_get(f"{CORE}/seasons/2026/types/2/athletes/{athlete_id}/statistics/0")
     if not r:
         return None
     try:
@@ -115,69 +115,58 @@ def get_ppg(athlete_id):
     return None
 
 
-def get_l10_ppg(athlete_id):
+def get_l10_ppg(athlete_id, team_id):
     """
-    Try ESPN splits for a pre-computed last-10-games PPG.
-    Falls back to last 10 events from the event log.
+    Compute PPG over last 10 games using team schedule + event box scores.
     """
-    # --- attempt 1: splits endpoint ---
-    r = throttled_get(f"{CORE}/athletes/{athlete_id}/splits?season=2026&seasontype=2")
-    if r:
-        try:
-            data = r.json()
-            for cat in data.get("categories", []):
-                for row in cat.get("rows", []):
-                    label = row.get("displayName", "").lower()
-                    if "last 10" in label or "l10" in label:
-                        stats  = row.get("stats", [])
-                        labels = cat.get("labels", [])
-                        if "PTS" in labels:
-                            idx = labels.index("PTS")
-                            return round(float(stats[idx]), 1)
-        except Exception:
-            pass
-
-    # --- attempt 2: event log ---
-    r = throttled_get(f"{CORE}/athletes/{athlete_id}/eventlog?season=2026&seasontype=2&limit=15")
+    # Get last 10 completed game event IDs for this team
+    r = throttled_get(f"{BASE}/teams/{team_id}/schedule?season=2026&seasontype=2")
     if not r:
         return None
     try:
-        data = r.json()
-        event_refs = [e.get("$ref") for e in data.get("events", {}).get("items", []) if e.get("$ref")]
-        points = []
-        for ref in event_refs[-15:]:
-            # Each ref points to an event; derive athlete-stats URL
-            # ref format: .../events/{eventId}/competitions/{compId}/competitors/{teamId}/roster/{athId}/statistics/0
-            stats_ref = ref.replace("/events/", "/events/").strip()
-            # Build the stats URL for this athlete in this event
-            # Try to get athlete game stats from the ref directly
-            r2 = throttled_get(stats_ref)
-            if not r2:
-                continue
-            edata = r2.json()
-            for cat in edata.get("categories", []):
-                labels = cat.get("labels", [])
-                if "PTS" in labels:
-                    idx = labels.index("PTS")
-                    vals = cat.get("values", [])
-                    if idx < len(vals):
-                        try:
-                            points.append(int(vals[idx]))
-                        except (ValueError, TypeError):
-                            pass
-                    break
-        last10 = points[-10:] if len(points) >= 10 else points
-        if last10:
-            return round(sum(last10) / len(last10), 1)
+        events = r.json().get("events", [])
+        completed_ids = [
+            e["id"] for e in events
+            if e.get("competitions", [{}])[0].get("status", {}).get("type", {}).get("completed", False)
+        ]
+        last10_ids = completed_ids[-10:]
     except Exception:
-        pass
-    return None
+        return None
+
+    points = []
+    for event_id in last10_ids:
+        r2 = throttled_get(f"{BASE}/summary?event={event_id}")
+        if not r2:
+            continue
+        try:
+            box = r2.json().get("boxscore", {})
+            for team_stats in box.get("players", []):
+                for stat_group in team_stats.get("statistics", []):
+                    labels = stat_group.get("labels", [])
+                    if "PTS" not in labels:
+                        continue
+                    pts_idx = labels.index("PTS")
+                    for athlete in stat_group.get("athletes", []):
+                        if str(athlete.get("athlete", {}).get("id")) == str(athlete_id):
+                            try:
+                                pts = int(athlete["stats"][pts_idx])
+                                points.append(pts)
+                            except (ValueError, TypeError, IndexError, KeyError):
+                                pass
+        except Exception:
+            continue
+
+    if not points:
+        return None
+    last10 = points[-10:] if len(points) >= 10 else points
+    return round(sum(last10) / len(last10), 1)
 
 
 def enrich_player(p):
     aid = p["athlete_id"]
+    tid = p["team_id"]
     p["PPG"]     = get_ppg(aid)
-    p["PPG_L10"] = get_l10_ppg(aid)
+    p["PPG_L10"] = get_l10_ppg(aid, tid)
     return p
 
 
