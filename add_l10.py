@@ -74,14 +74,18 @@ TEAM_TO_SLUG = {
     "Santa Clara": "santa-clara",
     "Iowa State": "iowa-state",
     "Tennessee State": "tennessee-state",
+    "Texas": "texas",
 }
+
+# Only process these teams — all 4 are missing from the CSV entirely
+TEAMS_TO_FIX = {"LIU", "Hawaii", "Queens", "Texas"}
 
 ROSTER_URL = "https://www.sports-reference.com/cbb/schools/{}/men/2026.html"
 GAMELOG_URL = "https://www.sports-reference.com/cbb/players/{}/gamelog/2026"
 
 
-def get_player_slugs(school_slug):
-    """Returns {normalized_name: player_slug} for all players on a roster."""
+def get_player_data(school_slug):
+    """Returns {normalized_name: {"slug": ..., "ppg": ...}} from the per-game table."""
     url = ROSTER_URL.format(school_slug)
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
@@ -92,8 +96,9 @@ def get_player_slugs(school_slug):
     soup = BeautifulSoup(r.text, "html.parser")
     table = soup.find("table", {"id": "per_game"})
     if not table:
+        print(f"  No per_game table found for {school_slug}")
         return {}
-    slugs = {}
+    players = {}
     for row in table.find("tbody").find_all("tr"):
         if row.get("class") and "thead" in row.get("class"):
             continue
@@ -103,10 +108,17 @@ def get_player_slugs(school_slug):
         link = name_cell.find("a")
         if not link:
             continue
-        name = name_cell.get_text(strip=True).lower()
+        name = name_cell.get_text(strip=True)
         slug = link["href"].split("/")[3]
-        slugs[name] = slug
-    return slugs
+        ppg_cell = row.find("td", {"data-stat": "pts_per_g"})
+        ppg = None
+        if ppg_cell:
+            try:
+                ppg = float(ppg_cell.get_text(strip=True))
+            except ValueError:
+                pass
+        players[name.lower()] = {"name": name, "slug": slug, "ppg": ppg}
+    return players
 
 
 def get_l10_ppg(player_slug):
@@ -141,39 +153,45 @@ def get_l10_ppg(player_slug):
 df = pd.read_csv("march_madness_players.csv")
 print(f"Loaded {len(df)} players from CSV")
 
-# Cache slugs per team so we only fetch each roster once
-roster_cache = {}
+new_rows = []
 
-l10_values = []
-for _, row in df.iterrows():
-    team = row["Team"]
-    player_name = row["Player"]
+for team in TEAMS_TO_FIX:
     school_slug = TEAM_TO_SLUG.get(team)
-
     if not school_slug:
-        print(f"  No slug mapping for team: {team}")
-        l10_values.append(None)
+        print(f"No slug mapping for team: {team}")
         continue
 
-    if school_slug not in roster_cache:
-        print(f"Fetching roster for {team}...")
-        roster_cache[school_slug] = get_player_slugs(school_slug)
-        time.sleep(1.5)
+    # Drop any existing (likely empty/stale) rows for this team
+    df = df[df["Team"] != team]
 
-    slugs = roster_cache[school_slug]
-    player_slug = slugs.get(player_name.lower())
+    print(f"\nFetching roster for {team} ({school_slug})...")
+    player_data = get_player_data(school_slug)
+    time.sleep(1.5)
 
-    if not player_slug:
-        print(f"  No slug found for {player_name} ({team})")
-        l10_values.append(None)
+    if not player_data:
+        print(f"  No players found for {team}")
         continue
 
-    print(f"  {player_name} -> {player_slug}")
-    l10 = get_l10_ppg(player_slug)
-    l10_values.append(l10)
-    time.sleep(0.8)
+    for norm_name, info in player_data.items():
+        if info["ppg"] is None:
+            print(f"  Skipping {info['name']} — no PPG")
+            continue
+        print(f"  {info['name']} (PPG: {info['ppg']}) -> {info['slug']}")
+        l10 = get_l10_ppg(info["slug"])
+        new_rows.append({
+            "Player": info["name"],
+            "Team": team,
+            "PPG": info["ppg"],
+            "PPG_L10": l10,
+        })
+        time.sleep(0.8)
 
-df["PPG_L10"] = l10_values
+if new_rows:
+    new_df = pd.DataFrame(new_rows)
+    df = pd.concat([df, new_df], ignore_index=True)
+    df = df.sort_values("PPG", ascending=False).reset_index(drop=True)
+    print(f"\nAdded {len(new_rows)} new player rows")
+
 df.to_csv("march_madness_players.csv", index=False)
 
 print("\n=== TOP 30 BY PPG ===")
