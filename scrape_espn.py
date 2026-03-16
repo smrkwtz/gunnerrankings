@@ -47,6 +47,11 @@ TEAMS = [
     "Tennessee State",
 ]
 
+# Hard-coded ESPN team IDs for teams that can't be matched by name
+ID_OVERRIDES = {
+    "LIU": "112358",  # https://www.espn.com/mens-college-basketball/team/stats/_/id/112358
+}
+
 # Overrides for ambiguous names (e.g. two Miamis)
 TEAM_OVERRIDES = {
     "Miami":         "Miami Hurricanes",
@@ -72,14 +77,17 @@ def build_espn_team_map():
     espn_lookup.update({t["team"]["shortDisplayName"]: t["team"]["id"] for t in espn_teams})
 
     for name in TEAMS:
-        search = TEAM_OVERRIDES.get(name, name)
-        tid = espn_lookup.get(search)
-        if not tid:
-            # fuzzy: find first display name that contains our search term
-            for dn, tid2 in espn_lookup.items():
-                if search.lower() in dn.lower():
-                    tid = tid2
-                    break
+        if name in ID_OVERRIDES:
+            tid = ID_OVERRIDES[name]
+        else:
+            search = TEAM_OVERRIDES.get(name, name)
+            tid = espn_lookup.get(search)
+            if not tid:
+                # fuzzy: find first display name that contains our search term
+                for dn, tid2 in espn_lookup.items():
+                    if search.lower() in dn.lower():
+                        tid = tid2
+                        break
         if tid:
             mapping[name] = tid
             print(f"  {name} -> {tid}")
