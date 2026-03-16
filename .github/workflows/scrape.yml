@@ -24,6 +24,9 @@ jobs:
       - name: Scrape ESPN API (PPG + PPG_L10)
         run: python scrape_espn.py
 
+      - name: Fill missing PPG_L10 from Sports Reference
+        run: python add_l10.py
+
       - name: Commit and push CSV
         run: |
           git config user.name "github-actions[bot]"
