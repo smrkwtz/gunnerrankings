@@ -33,12 +33,10 @@ CORE = "https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-colle
 TEAMS_TO_FIX = ["LIU", "Hawaii", "Queens", "Texas"]
 
 ID_OVERRIDES = {
-    "LIU": "112358",
-}
-
-TEAM_OVERRIDES = {
-    "Hawaii": "Rainbow Warriors",
-    "Texas":  "Texas Longhorns",
+    "LIU":    "112358",
+    "Hawaii": "62",
+    "Queens": "2511",
+    "Texas":  "251",
 }
 
 

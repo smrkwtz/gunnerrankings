@@ -49,7 +49,10 @@ TEAMS = [
 
 # Hard-coded ESPN team IDs for teams that can't be matched by name
 ID_OVERRIDES = {
-    "LIU": "112358",  # https://www.espn.com/mens-college-basketball/team/stats/_/id/112358
+    "LIU":    "112358",  # https://www.espn.com/mens-college-basketball/team/_/id/112358
+    "Hawaii": "62",      # https://www.espn.com/mens-college-basketball/team/_/id/62
+    "Queens": "2511",    # https://www.espn.com/mens-college-basketball/team/_/id/2511
+    "Texas":  "251",     # https://www.espn.com/mens-college-basketball/team/_/id/251
 }
 
 # Overrides for ambiguous names (e.g. two Miamis)
@@ -59,11 +62,7 @@ TEAM_OVERRIDES = {
     "Penn":          "Pennsylvania Quakers",
     "Cal Baptist":   "California Baptist Lancers",
     "McNeese State": "McNeese Cowboys",
-    # LIU, Queens: let fuzzy substring matching handle these
-    # ESPN's Hawai'i uses a special okina char — match on unique substring instead
-    "Hawaii":        "Rainbow Warriors",
-    # "Texas Longhorns" is ESPN's exact name; prevents matching Texas A&M / Texas Tech
-    "Texas":         "Texas Longhorns",
+    # LIU, Hawaii, Queens, Texas: handled via ID_OVERRIDES above
 }
 
 
