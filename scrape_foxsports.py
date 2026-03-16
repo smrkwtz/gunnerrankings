@@ -181,19 +181,25 @@ def get_l10_ppg(player_slug):
         return None
 
     soup = BeautifulSoup(r.text, "html.parser")
+
+    # Debug: confirm we got a game log page, not a redirect
+    title = soup.find("title")
+    print(f"    [{player_slug}] url={r.url} title={title.get_text()[:60] if title else 'N/A'}")
+
     rows = soup.find_all("tr")
     points = []
 
-    # Find PTS column index using only <td> cells in the header row,
-    # so the index matches data rows (avoids off-by-one from leading <th>)
+    # Find the real game log header row — must contain MIN, REB, AST, and PTS
+    # to avoid matching season-averages tables or partial sub-headers
     pts_col = None
     for row in rows:
         td_texts = [td.get_text(strip=True).upper() for td in row.find_all("td")]
-        if "PTS" in td_texts:
+        if {"MIN", "REB", "AST", "PTS"}.issubset(set(td_texts)):
             pts_col = td_texts.index("PTS")
             break
 
     if pts_col is None:
+        print(f"    [{player_slug}] no game log header found ({len(rows)} rows)")
         return None
 
     for row in rows:
