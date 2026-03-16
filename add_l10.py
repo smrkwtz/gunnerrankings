@@ -149,20 +149,13 @@ def get_l10_ppg(player_slug):
     return round(sum(last10) / len(last10), 1)
 
 
-# Load existing CSV
-df = pd.read_csv("march_madness_players.csv")
-print(f"Loaded {len(df)} players from CSV")
-
-new_rows = []
+rows = []
 
 for team in TEAMS_TO_FIX:
     school_slug = TEAM_TO_SLUG.get(team)
     if not school_slug:
         print(f"No slug mapping for team: {team}")
         continue
-
-    # Drop any existing (likely empty/stale) rows for this team
-    df = df[df["Team"] != team]
 
     print(f"\nFetching roster for {team} ({school_slug})...")
     player_data = get_player_data(school_slug)
@@ -178,7 +171,7 @@ for team in TEAMS_TO_FIX:
             continue
         print(f"  {info['name']} (PPG: {info['ppg']}) -> {info['slug']}")
         l10 = get_l10_ppg(info["slug"])
-        new_rows.append({
+        rows.append({
             "Player": info["name"],
             "Team": team,
             "PPG": info["ppg"],
@@ -186,16 +179,11 @@ for team in TEAMS_TO_FIX:
         })
         time.sleep(0.8)
 
-if new_rows:
-    new_df = pd.DataFrame(new_rows)
-    df = pd.concat([df, new_df], ignore_index=True)
-    df = df.sort_values("PPG", ascending=False).reset_index(drop=True)
-    print(f"\nAdded {len(new_rows)} new player rows")
-
+df = pd.DataFrame(rows, columns=["Player", "Team", "PPG", "PPG_L10"])
+df = df.sort_values("PPG", ascending=False).reset_index(drop=True)
 df.to_csv("march_madness_players.csv", index=False)
 
-print("\n=== TOP 30 BY PPG ===")
-print(df.head(30).to_string(index=False))
 print(f"\nTotal players: {len(df)}")
 print(f"PPG_L10 filled: {df['PPG_L10'].notna().sum()}")
+print(df.to_string(index=False))
 print("Saved to march_madness_players.csv")

@@ -21,10 +21,7 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4 pandas
 
-      - name: Scrape ESPN API (PPG + PPG_L10)
-        run: python scrape_espn.py
-
-      - name: Fill missing PPG_L10 from Sports Reference
+      - name: Scrape LIU, Hawaii, Queens, Texas from Sports Reference
         run: python add_l10.py
 
       - name: Commit and push CSV
