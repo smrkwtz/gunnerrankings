@@ -1,5 +1,5 @@
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 import pandas as pd
 import time
 
@@ -41,7 +41,7 @@ TEAM_TO_SLUG = {
     "Houston": "houston",
     "Idaho": "idaho",
     "Arizona": "arizona",
-    "LIU": "liu",
+    "LIU": "long-island-university",
     "Villanova": "villanova",
     "Utah State": "utah-state",
     "Wisconsin": "wisconsin",
@@ -84,6 +84,17 @@ ROSTER_URL = "https://www.sports-reference.com/cbb/schools/{}/men/2026.html"
 GAMELOG_URL = "https://www.sports-reference.com/cbb/players/{}/gamelog/2026"
 
 
+def find_table_in_comments(soup, table_id):
+    """Sports Reference hides tables inside HTML comments — parse them out."""
+    for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
+        if table_id in comment:
+            comment_soup = BeautifulSoup(comment, "html.parser")
+            table = comment_soup.find("table", {"id": table_id})
+            if table:
+                return table
+    return None
+
+
 def get_player_data(school_slug):
     """Returns {normalized_name: {"slug": ..., "ppg": ...}} from the per-game table."""
     url = ROSTER_URL.format(school_slug)
@@ -94,7 +105,7 @@ def get_player_data(school_slug):
         print(f"  ERROR fetching roster for {school_slug}: {e}")
         return {}
     soup = BeautifulSoup(r.text, "html.parser")
-    table = soup.find("table", {"id": "per_game"})
+    table = soup.find("table", {"id": "per_game"}) or find_table_in_comments(soup, "per_game")
     if not table:
         print(f"  No per_game table found for {school_slug}")
         return {}
@@ -130,7 +141,7 @@ def get_l10_ppg(player_slug):
         print(f"    ERROR fetching gamelog for {player_slug}: {e}")
         return None
     soup = BeautifulSoup(r.text, "html.parser")
-    table = soup.find("table", {"id": "gamelog"})
+    table = soup.find("table", {"id": "gamelog"}) or find_table_in_comments(soup, "gamelog")
     if not table:
         return None
     points = []
