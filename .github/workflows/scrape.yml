@@ -21,8 +21,8 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4 pandas
 
-      - name: Scrape Fox Sports (PPG + PPG_L10)
-        run: python scrape_foxsports.py
+      - name: Scrape ESPN API (PPG + PPG_L10)
+        run: python scrape_espn.py
 
       - name: Commit and push CSV
         run: |
