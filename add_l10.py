@@ -171,10 +171,9 @@ def get_l10_ppg(athlete_id, team_id):
         except Exception:
             continue
 
-    if not points:
+    if not last10_ids:
         return None
-    last10 = points[-10:] if len(points) >= 10 else points
-    return round(sum(last10) / len(last10), 1)
+    return round(sum(points) / len(last10_ids), 1)
 
 
 def enrich_player(p):
