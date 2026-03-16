@@ -4,6 +4,21 @@ import pandas as pd
 import time
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
+rate_lock = threading.Lock()
+last_request_time = [0.0]
+MIN_DELAY = 0.5  # seconds between requests globally
+
+
+def throttled_get(url, headers, timeout=15):
+    with rate_lock:
+        elapsed = time.time() - last_request_time[0]
+        if elapsed < MIN_DELAY:
+            time.sleep(MIN_DELAY - elapsed)
+        last_request_time[0] = time.time()
+    return requests.get(url, headers=headers, timeout=timeout)
 
 TEAMS = {
     # EAST
@@ -102,7 +117,7 @@ def extract_next_data(soup):
 def get_players(team_slug, team_name):
     url = TEAM_STATS_URL.format(team_slug)
     try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
+        r = throttled_get(url, HEADERS)
         r.raise_for_status()
     except Exception as e:
         print(f"  ERROR {team_name}: {e}")
@@ -154,7 +169,7 @@ def get_l10_ppg(player_slug):
         return None
     url = GAMELOG_URL.format(player_slug)
     try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
+        r = throttled_get(url, HEADERS)
         r.raise_for_status()
     except Exception as e:
         print(f"    ERROR gamelog {player_slug}: {e}")
@@ -164,18 +179,16 @@ def get_l10_ppg(player_slug):
     rows = soup.find_all("tr")
     points = []
 
-    # Find PTS column by scanning header rows (Fox Sports uses both th and td in headers)
+    # Find PTS column index using only <td> cells in the header row,
+    # so the index matches data rows (avoids off-by-one from leading <th>)
     pts_col = None
     for row in rows:
-        cells = row.find_all(["th", "td"])
-        texts = [c.get_text(strip=True).upper() for c in cells]
-        if "PTS" in texts:
-            pts_col = texts.index("PTS")
-            print(f"    [columns: {texts}, PTS at index {pts_col}]")
+        td_texts = [td.get_text(strip=True).upper() for td in row.find_all("td")]
+        if "PTS" in td_texts:
+            pts_col = td_texts.index("PTS")
             break
 
     if pts_col is None:
-        print(f"    [no PTS column found for {player_slug}]")
         return None
 
     for row in rows:
@@ -184,7 +197,7 @@ def get_l10_ppg(player_slug):
             continue
         try:
             pts = int(cells[pts_col].get_text(strip=True))
-            if 0 <= pts <= 75:  # sanity check: valid point total
+            if 0 <= pts <= 75:
                 points.append(pts)
         except ValueError:
             continue
@@ -195,18 +208,31 @@ def get_l10_ppg(player_slug):
     return round(sum(last10) / len(last10), 1)
 
 
-# Main loop
+# Step 1: fetch all team rosters (sequential — 68 teams)
 all_players = []
 for team_slug, team_name in TEAMS.items():
     print(f"Scraping {team_name}...")
     players = get_players(team_slug, team_name)
     print(f"  Found {len(players)} players")
-    for p in players:
-        slug = p.pop("player_slug")
-        time.sleep(2)
-        p["PPG_L10"] = get_l10_ppg(slug)
     all_players.extend(players)
-    time.sleep(3)
+
+print(f"\nTotal players found: {len(all_players)}")
+print("Fetching game logs in parallel...")
+
+# Step 2: fetch all game logs in parallel (10 workers)
+def fetch_l10(player):
+    slug = player.pop("player_slug")
+    player["PPG_L10"] = get_l10_ppg(slug)
+    return player
+
+with ThreadPoolExecutor(max_workers=10) as executor:
+    futures = {executor.submit(fetch_l10, p): p for p in all_players}
+    done = 0
+    for future in as_completed(futures):
+        future.result()
+        done += 1
+        if done % 50 == 0:
+            print(f"  {done}/{len(all_players)} game logs fetched...")
 
 df = pd.DataFrame(all_players)
 if df.empty:
