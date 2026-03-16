@@ -49,12 +49,14 @@ TEAMS = [
 
 # Overrides for ambiguous names (e.g. two Miamis)
 TEAM_OVERRIDES = {
-    "Miami":      "Miami Hurricanes",
-    "Miami (OH)": "Miami (OH) RedHawks",
-    "Penn":       "Pennsylvania Quakers",
-    "LIU":        "LIU Sharks",
-    "Queens":     "Queens Royals",
-    "Cal Baptist":"California Baptist Lancers",
+    "Miami":         "Miami Hurricanes",
+    "Miami (OH)":    "Miami (OH) RedHawks",
+    "Penn":          "Pennsylvania Quakers",
+    "LIU":           "LIU Sharks",
+    "Queens":        "Queens Royals",
+    "Cal Baptist":   "California Baptist Lancers",
+    "McNeese State": "McNeese Cowboys",
+    "Hawaii":        "Hawai\u02BBi Rainbow Warriors",
 }
 
 
@@ -78,8 +80,9 @@ def build_espn_team_map():
                     break
         if tid:
             mapping[name] = tid
+            print(f"  {name} -> {tid}")
         else:
-            print(f"  WARNING: no ESPN match for '{name}'")
+            print(f"  WARNING: no ESPN match for '{name}' (searched '{search}')")
     return mapping
 
 
