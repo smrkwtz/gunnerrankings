@@ -41,7 +41,7 @@ TEAMS = [
     "Arizona", "LIU", "Villanova", "Utah State", "Wisconsin", "High Point",
     "Arkansas", "Hawaii", "BYU", "NC State", "Miami", "Gonzaga",
     "Kennesaw State", "Missouri", "Purdue", "Queens",
-    "Michigan", "Howard", "UMBC", "Georgia", "Saint Louis", "Texas Tech",
+    "Michigan", "Howard", "UMBC", "Georgia", "Saint Louis", "Texas", "Texas Tech",
     "Akron", "Alabama", "Hofstra", "Tennessee", "SMU", "Miami (OH)",
     "Virginia", "Wright State", "Kentucky", "Santa Clara", "Iowa State",
     "Tennessee State",
@@ -52,11 +52,13 @@ TEAM_OVERRIDES = {
     "Miami":         "Miami Hurricanes",
     "Miami (OH)":    "Miami (OH) RedHawks",
     "Penn":          "Pennsylvania Quakers",
-    "LIU":           "LIU Sharks",
-    "Queens":        "Queens Royals",
     "Cal Baptist":   "California Baptist Lancers",
     "McNeese State": "McNeese Cowboys",
-    "Hawaii":        "Hawai\u02BBi Rainbow Warriors",
+    # LIU, Queens: let fuzzy substring matching handle these
+    # ESPN's Hawai'i uses a special okina char — match on unique substring instead
+    "Hawaii":        "Rainbow Warriors",
+    # "Texas Longhorns" is ESPN's exact name; prevents matching Texas A&M / Texas Tech
+    "Texas":         "Texas Longhorns",
 }
 
 
